@@ -3,7 +3,7 @@ import sqlite3
 from datetime import date
 import pandas as pd
 import streamlit as st
-#import plotly.express as px
+import plotly.express as px
 
 DB = "chantier.db"
 
