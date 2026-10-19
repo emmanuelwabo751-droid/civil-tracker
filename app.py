@@ -1,4 +1,5 @@
 import sqlite3
+import hashlib
 from datetime import date
 from pathlib import Path
 
@@ -36,8 +37,10 @@ div[data-testid="stDataFrame"] { background: white; }
 
 def connect_db():
     """Crée les tables de l'application et active les clés étrangères."""
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS projets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -210,6 +213,85 @@ def seed_demo_data(conn):
         conn.executemany("""
             INSERT INTO depenses(date,categorie,description,montant,projet_id) VALUES(?,?,?,?,?)
         """, [(d, cat, desc, amount, pid) for d, cat, desc, amount in demo["expenses"]])
+    # Jeu de données enrichi : davantage de sous-tâches pour chaque chantier.
+    # Ces données sont insérées une seule fois, sans créer de doublons.
+    extra_tasks = {
+        "Construction d'une villa R+1": [
+            ("Préparation", "Nettoyage et débroussaillage", "Jean Mbarga", "2026-01-16", "2026-01-22", 100, "Terminé", 1, 350000, 330000),
+            ("Terrassement", "Décapage de la terre végétale", "Paul Tchinda", "2026-01-23", "2026-02-02", 100, "Terminé", 2, 650000, 620000),
+            ("Fondations", "Implantation des axes", "Jean Mbarga", "2026-02-03", "2026-02-08", 100, "Terminé", 1, 250000, 240000),
+            ("Fondations", "Béton de propreté", "Paul Tchinda", "2026-02-09", "2026-02-15", 100, "Terminé", 2, 480000, 500000),
+            ("Fondations", "Ferraillage des semelles", "François Ewane", "2026-02-16", "2026-02-28", 100, "Terminé", 2, 1200000, 1180000),
+            ("Fondations", "Coulage des semelles", "Paul Tchinda", "2026-03-01", "2026-03-08", 100, "Terminé", 2, 950000, 980000),
+            ("Gros œuvre", "Élévation du rez-de-chaussée", "André Essomba", "2026-03-16", "2026-05-15", 85, "En cours", 3, 3500000, 3100000),
+            ("Gros œuvre", "Poteaux du rez-de-chaussée", "François Ewane", "2026-04-01", "2026-04-25", 100, "Terminé", 2, 1800000, 1750000),
+            ("Gros œuvre", "Poutres et chaînages", "André Essomba", "2026-05-01", "2026-05-30", 90, "En cours", 2, 2200000, 2050000),
+            ("Gros œuvre", "Dalle du premier étage", "Paul Tchinda", "2026-06-01", "2026-06-30", 80, "En cours", 3, 4200000, 3900000),
+            ("Maçonnerie", "Cloisons intérieures", "André Essomba", "2026-06-15", "2026-07-20", 80, "En cours", 2, 1900000, 1600000),
+            ("Menuiserie", "Pose des cadres de portes", "Serge Mvondo", "2026-08-01", "2026-08-20", 75, "En cours", 1, 850000, 650000),
+            ("Électricité", "Passage des gaines électriques", "Serge Mvondo", "2026-08-10", "2026-09-10", 75, "En cours", 2, 1100000, 780000),
+            ("Plomberie", "Réseaux d'alimentation en eau", "Serge Mvondo", "2026-08-15", "2026-09-15", 75, "En cours", 2, 1250000, 900000),
+            ("Toiture", "Préparation de la charpente", "François Ewane", "2026-08-01", "2026-09-15", 75, "En cours", 2, 2500000, 1800000),
+        ],
+        "Réhabilitation d'un bâtiment": [
+            ("Diagnostic", "Inspection des désordres", "Michel Foka", "2026-03-01", "2026-03-05", 100, "Terminé", 1, 250000, 230000),
+            ("Démolition", "Évacuation des gravats", "Michel Foka", "2026-03-06", "2026-03-12", 100, "Terminé", 1, 300000, 290000),
+            ("Maçonnerie", "Reprise des fissures", "Pierre Atangana", "2026-03-25", "2026-04-20", 90, "En cours", 2, 850000, 760000),
+            ("Maçonnerie", "Réparation des linteaux", "Pierre Atangana", "2026-04-21", "2026-05-10", 85, "En cours", 2, 650000, 590000),
+            ("Toiture", "Remplacement des tôles abîmées", "Michel Foka", "2026-04-15", "2026-05-15", 80, "En cours", 2, 1200000, 980000),
+            ("Étanchéité", "Préparation du support", "Lucie Nono", "2026-09-01", "2026-09-10", 85, "En cours", 1, 450000, 390000),
+            ("Étanchéité", "Application de la membrane", "Lucie Nono", "2026-09-11", "2026-10-05", 75, "En cours", 2, 1250000, 820000),
+            ("Menuiserie", "Réparation des fenêtres", "Michel Foka", "2026-05-15", "2026-06-10", 90, "En cours", 1, 550000, 490000),
+            ("Électricité", "Remplacement des câbles défectueux", "Pierre Atangana", "2026-05-20", "2026-06-15", 80, "En cours", 1, 750000, 610000),
+            ("Plomberie", "Réparation des conduites", "Pierre Atangana", "2026-05-25", "2026-06-20", 85, "En cours", 1, 600000, 500000),
+            ("Finition", "Préparation des murs", "David Mballa", "2026-06-16", "2026-07-05", 90, "En cours", 1, 400000, 330000),
+            ("Finition", "Application de la première couche", "David Mballa", "2026-07-06", "2026-07-25", 80, "En cours", 1, 650000, 520000),
+            ("Revêtement", "Pose des carreaux dans les pièces", "Pierre Atangana", "2026-07-01", "2026-08-15", 75, "En cours", 2, 1300000, 950000),
+            ("Sécurité", "Remise en état des garde-corps", "Michel Foka", "2026-08-01", "2026-08-20", 80, "En cours", 1, 350000, 280000),
+            ("Réception", "Nettoyage et contrôle des locaux", "Michel Foka", "2026-10-01", "2026-10-20", 75, "En cours", 1, 250000, 120000),
+        ],
+        "Construction d'un immeuble R+3": [
+            ("Études", "Vérification des plans d'exécution", "Serge Kamga", "2026-05-01", "2026-05-10", 100, "Terminé", 1, 350000, 330000),
+            ("Installation", "Clôture et panneau de chantier", "Serge Kamga", "2026-05-02", "2026-05-12", 100, "Terminé", 1, 450000, 430000),
+            ("Terrassement", "Décapage et nivellement", "Serge Kamga", "2026-05-10", "2026-05-25", 100, "Terminé", 2, 900000, 850000),
+            ("Terrassement", "Fouilles en rigoles", "Eric Talla", "2026-05-26", "2026-06-10", 100, "Terminé", 2, 1400000, 1350000),
+            ("Fondations", "Béton de propreté", "Eric Talla", "2026-06-16", "2026-06-25", 100, "Terminé", 1, 700000, 680000),
+            ("Fondations", "Ferraillage des semelles", "Alain Njoya", "2026-06-26", "2026-07-20", 90, "En cours", 3, 2200000, 1950000),
+            ("Fondations", "Coulage des semelles", "Eric Talla", "2026-07-21", "2026-08-05", 85, "En cours", 3, 3100000, 2700000),
+            ("Fondations", "Élévation des soubassements", "Brice Fotso", "2026-08-06", "2026-08-25", 80, "En cours", 2, 1800000, 1450000),
+            ("Fondations", "Remblai compacté", "Eric Talla", "2026-08-26", "2026-09-10", 75, "En cours", 2, 1200000, 850000),
+            ("Structure", "Façonnage des armatures", "Alain Njoya", "2026-09-16", "2026-10-05", 80, "En cours", 2, 1500000, 900000),
+            ("Structure", "Coffrage des poteaux", "Eric Talla", "2026-09-20", "2026-10-15", 75, "En cours", 2, 1800000, 750000),
+            ("Structure", "Préparation de la dalle basse", "Alain Njoya", "2026-09-25", "2026-10-20", 75, "En cours", 2, 2200000, 600000),
+            ("Réseaux", "Prévision des réservations plomberie", "Brice Fotso", "2026-09-20", "2026-10-10", 75, "En cours", 1, 450000, 200000),
+            ("Sécurité", "Mise en place des protections collectives", "Serge Kamga", "2026-05-10", "2026-05-20", 100, "Terminé", 1, 300000, 280000),
+            ("Logistique", "Organisation du stockage des matériaux", "Serge Kamga", "2026-05-05", "2026-05-15", 100, "Terminé", 1, 250000, 230000),
+        ],
+    }
+    for project_name, task_rows in extra_tasks.items():
+        project = conn.execute("SELECT id FROM projets WHERE nom=?", (project_name,)).fetchone()
+        if not project:
+            continue
+        pid = project[0]
+        for task in task_rows:
+            exists = conn.execute(
+                "SELECT 1 FROM taches WHERE projet_id=? AND tache=?", (pid, task[1])
+            ).fetchone()
+            if not exists:
+                conn.execute("""
+                    INSERT INTO taches(projet_id,lot,tache,responsable,debut,fin_prevue,avancement,statut,poids,cout_prevu,cout_reel)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                """, (pid, *task))
+        # Pour la démonstration demandée : les tâches des 3 chantiers exemples
+        # affichent un avancement d'au moins 70 %.
+        conn.execute("""
+            UPDATE taches
+            SET avancement=70, statut='En cours'
+            WHERE projet_id=? AND avancement < 70
+        """, (pid,))
+        conn.execute("""
+            UPDATE taches SET statut='Terminé' WHERE projet_id=? AND avancement >= 100
+        """, (pid,))
     conn.commit()
 
 
@@ -229,6 +311,36 @@ def load_table(conn, table, project_id=None):
     )
 
 
+# ------------------------------------------------------------
+# Connexion à l'application
+# Identifiants de démonstration : admin / Civil@2026
+# À changer avant tout usage réel ou déploiement public.
+# ------------------------------------------------------------
+DEMO_USER = "admin"
+DEMO_PASSWORD_HASH = hashlib.sha256("Civil@2026".encode("utf-8")).hexdigest()
+
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.markdown("<h1 style='text-align:center'>🏗️ CIVIL TRACKER</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center'>Connectez-vous pour gérer vos chantiers</p>", unsafe_allow_html=True)
+    _, login_col, _ = st.columns([1, 1.2, 1])
+    with login_col:
+        with st.form("login_form"):
+            username = st.text_input("Nom d'utilisateur", placeholder="Entrez votre identifiant")
+            password = st.text_input("Mot de passe", type="password", placeholder="Entrez votre mot de passe")
+            login_submitted = st.form_submit_button("Se connecter", use_container_width=True)
+        if login_submitted:
+            password_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+            if username.strip() == DEMO_USER and password_hash == DEMO_PASSWORD_HASH:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Identifiant ou mot de passe incorrect.")
+        st.caption("Compte de démonstration : admin · Mot de passe : Civil@2026")
+    st.stop()
+
 conn = connect_db()
 seed_demo_data(conn)
 projects = load_table(conn, "projets")
@@ -241,6 +353,11 @@ menu = st.sidebar.radio("MENU PRINCIPAL", [
     "Tableau de bord", "Projets", "Travaux / Avancement",
     "Ouvriers", "Matériaux", "Dépenses", "Analyse", "Données / Export"
 ])
+
+st.sidebar.divider()
+if st.sidebar.button("Se déconnecter", use_container_width=True):
+    st.session_state.authenticated = False
+    st.rerun()
 
 if not projects.empty:
     project_options = projects["id"].tolist()
