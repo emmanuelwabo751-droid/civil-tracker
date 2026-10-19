@@ -26,65 +26,75 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS depenses(
         id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, categorie TEXT,
         description TEXT, montant REAL, projet_id INTEGER)""")
-    # Insérer automatiquement des données de démonstration au premier lancement.
-    # Si la table projets contient déjà des données, rien n'est ajouté.
-    if c.execute("SELECT COUNT(*) FROM projets").fetchone()[0] == 0:
-        c.execute("""INSERT INTO projets(nom, client, localisation, budget, debut, fin_prevue)
-                     VALUES (?, ?, ?, ?, ?, ?)""",
-                  ("Construction d'une villa R+1", "M. Tchoumi", "Douala - Bonamoussadi",
-                   45000000, "2026-09-01", "2027-06-30"))
-        c.execute("""INSERT INTO projets(nom, client, localisation, budget, debut, fin_prevue)
-                     VALUES (?, ?, ?, ?, ?, ?)""",
-                  ("Réhabilitation d'un bâtiment", "Entreprise BTP Cameroun", "Yaoundé - Mvan",
-                   18000000, "2026-08-15", "2027-02-28"))
-        c.execute("""INSERT INTO projets(nom, client, localisation, budget, debut, fin_prevue)
-                     VALUES (?, ?, ?, ?, ?, ?)""",
-                  ("Petit immeuble R+3", "SCI Les Bâtisseurs", "Bafoussam - Centre",
-                   82000000, "2026-10-01", "2027-12-15"))
-
-        ids = [row[0] for row in c.execute("SELECT id FROM projets ORDER BY id").fetchall()]
-        p1, p2, p3 = ids
-        c.executemany("""INSERT INTO taches(projet_id, lot, tache, responsable, debut, fin_prevue,
-                         avancement, statut, poids, cout_prevu, cout_reel)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", [
-            (p1, "Gros œuvre", "Fondations", "Jean Mvondo", "2026-09-01", "2026-10-15", 100, "Terminé", 2, 6500000, 6300000),
-            (p1, "Gros œuvre", "Élévation des murs", "Paul Tchoumi", "2026-10-16", "2026-12-15", 55, "En cours", 3, 12000000, 6800000),
-            (p1, "Gros œuvre", "Dalle du premier étage", "André Nguema", "2026-12-16", "2027-01-20", 10, "En cours", 2, 7500000, 900000),
-            (p1, "Second œuvre", "Électricité", "Marie Fotso", "2027-02-01", "2027-03-15", 0, "À faire", 1, 2200000, 0),
-            (p2, "Réhabilitation", "Dépose et nettoyage", "Samuel Etoa", "2026-08-15", "2026-09-10", 100, "Terminé", 1, 1800000, 1750000),
-            (p2, "Finition", "Peinture intérieure", "Marie Fotso", "2026-10-01", "2026-11-20", 50, "En cours", 2, 3200000, 1700000),
-            (p3, "Gros œuvre", "Implantation et terrassement", "David Kenfack", "2026-10-01", "2026-11-15", 15, "En cours", 2, 5000000, 950000),
-        ])
-        c.executemany("""INSERT INTO ouvriers(nom, metier, telephone, projet_id, heures)
-                         VALUES (?, ?, ?, ?, ?)""", [
-            ("Jean Mvondo", "Chef de chantier", "690 00 00 01", p1, 180),
-            ("Paul Tchoumi", "Maçon", "690 00 00 02", p1, 156),
-            ("André Nguema", "Ferrailleur", "690 00 00 03", p1, 124),
-            ("Marie Fotso", "Conductrice de travaux", "690 00 00 04", p2, 142),
-            ("Samuel Etoa", "Menuisier", "690 00 00 05", p2, 96),
-            ("David Kenfack", "Manœuvre", "690 00 00 06", p3, 72),
-        ])
-        c.executemany("""INSERT INTO materiaux(nom, unite, quantite_prevue, quantite_utilisee,
-                         prix_unitaire, projet_id) VALUES (?, ?, ?, ?, ?, ?)""", [
-            ("Ciment CPJ 35", "sacs", 500, 120, 5500, p1),
-            ("Fer à béton 12 mm", "barres", 250, 80, 4200, p1),
-            ("Sable", "m³", 40, 15, 18000, p1),
-            ("Ciment CPJ 35", "sacs", 200, 75, 5500, p2),
-            ("Parpaings 15", "unités", 5000, 900, 450, p3),
-        ])
-        c.executemany("""INSERT INTO depenses(date, categorie, description, montant, projet_id)
-                         VALUES (?, ?, ?, ?, ?)""", [
-            ("2026-10-02", "Matériaux", "Achat de ciment", 660000, p1),
-            ("2026-10-04", "Transport", "Transport de sable", 95000, p1),
-            ("2026-10-06", "Équipement", "Location de matériel", 180000, p1),
-            ("2026-10-03", "Matériaux", "Achat de peinture", 240000, p2),
-            ("2026-10-08", "Matériaux", "Achat de parpaings", 405000, p3),
-        ])
-
     c.commit()
     return c
 
 conn = db()
+
+
+def inserer_donnees_test(conn):
+    """Ajoute un jeu de démonstration une seule fois, si la base est vide."""
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM projets")
+    if cur.fetchone()[0] > 0:
+        return
+
+    projets = [
+        ("Villa R+1", "Client Démo A", "Douala - Bonamoussadi", 45000000, "2026-09-01", "2027-03-30"),
+        ("Réhabilitation d'un bâtiment", "Client Démo B", "Yaoundé - Ngoa-Ekellé", 18000000, "2026-09-15", "2027-01-31"),
+        ("Immeuble R+3", "Client Démo C", "Bafoussam - Centre-ville", 95000000, "2026-10-01", "2027-10-30"),
+    ]
+    cur.executemany(
+        "INSERT INTO projets(nom,client,localisation,budget,debut,fin_prevue) VALUES(?,?,?,?,?,?)",
+        projets,
+    )
+    ids = [row[0] for row in cur.execute("SELECT id FROM projets ORDER BY id ASC").fetchall()]
+    p1, p2, p3 = ids[-3:]
+
+    taches = [
+        (p1, "Installation", "Installation du chantier", "Chef de chantier", "2026-09-01", "2026-09-10", 100, "Terminé", 1, 1200000, 1150000),
+        (p1, "Gros œuvre", "Fondations", "Ingénieur travaux", "2026-09-11", "2026-10-20", 75, "En cours", 3, 6500000, 5100000),
+        (p1, "Gros œuvre", "Élévation des murs", "Maçon principal", "2026-10-01", "2026-12-15", 25, "En cours", 4, 9000000, 2300000),
+        (p1, "Second œuvre", "Électricité", "Électricien", "2027-01-10", "2027-02-10", 0, "À faire", 2, 1800000, 0),
+        (p2, "Préparation", "Diagnostic du bâtiment", "Technicien bâtiment", "2026-09-15", "2026-09-25", 100, "Terminé", 1, 500000, 450000),
+        (p2, "Réparation", "Réfection de la toiture", "Chef couvreur", "2026-09-26", "2026-11-15", 40, "En cours", 3, 4200000, 1700000),
+        (p3, "Gros œuvre", "Terrassement", "Conducteur de travaux", "2026-10-01", "2026-10-20", 30, "En cours", 2, 3500000, 1100000),
+    ]
+    cur.executemany("""INSERT INTO taches
+        (projet_id,lot,tache,responsable,debut,fin_prevue,avancement,statut,poids,cout_prevu,cout_reel)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?)""", taches)
+
+    ouvriers = [
+        ("Jean Mbarga", "Maçon", "690000101", p1, 120),
+        ("Paul Tchoumi", "Manœuvre", "690000102", p1, 96),
+        ("Marie Ngono", "Électricienne", "690000103", p1, 24),
+        ("André Kamga", "Coffreur", "690000104", p2, 88),
+        ("Samuel Fokou", "Couvreur", "690000105", p2, 72),
+        ("David Ndam", "Conducteur d'engins", "690000106", p3, 40),
+    ]
+    cur.executemany("INSERT INTO ouvriers(nom,metier,telephone,projet_id,heures) VALUES(?,?,?,?,?)", ouvriers)
+
+    materiaux = [
+        ("Ciment CPJ 35", "sac", 500, 180, 5000, p1),
+        ("Fer à béton 12 mm", "barre", 250, 90, 4500, p1),
+        ("Sable", "m³", 35, 18, 18000, p1),
+        ("Parpaings 15", "unité", 2500, 700, 450, p2),
+        ("Gravier", "m³", 25, 8, 22000, p3),
+    ]
+    cur.executemany("INSERT INTO materiaux(nom,unite,quantite_prevue,quantite_utilisee,prix_unitaire,projet_id) VALUES(?,?,?,?,?,?)", materiaux)
+
+    depenses = [
+        ("2026-09-02", "Matériaux", "Achat initial de ciment", 900000, p1),
+        ("2026-09-12", "Transport", "Transport de sable et gravier", 150000, p1),
+        ("2026-09-28", "Main-d'œuvre", "Paiement équipe maçonnerie", 420000, p1),
+        ("2026-10-02", "Matériaux", "Achat de parpaings", 315000, p2),
+        ("2026-10-10", "Équipement", "Location de matériel", 180000, p3),
+    ]
+    cur.executemany("INSERT INTO depenses(date,categorie,description,montant,projet_id) VALUES(?,?,?,?,?)", depenses)
+    conn.commit()
+
+
+inserer_donnees_test(conn)
 st.set_page_config(page_title="CIVIL TRACKER", page_icon="🏗️", layout="wide")
 
 st.markdown("""
