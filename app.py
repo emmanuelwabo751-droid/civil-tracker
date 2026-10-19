@@ -4,7 +4,6 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 import plotly.express as px
-
 DB = "chantier.db"
 
 def db():
@@ -27,6 +26,61 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS depenses(
         id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, categorie TEXT,
         description TEXT, montant REAL, projet_id INTEGER)""")
+    # Insérer automatiquement des données de démonstration au premier lancement.
+    # Si la table projets contient déjà des données, rien n'est ajouté.
+    if c.execute("SELECT COUNT(*) FROM projets").fetchone()[0] == 0:
+        c.execute("""INSERT INTO projets(nom, client, localisation, budget, debut, fin_prevue)
+                     VALUES (?, ?, ?, ?, ?, ?)""",
+                  ("Construction d'une villa R+1", "M. Tchoumi", "Douala - Bonamoussadi",
+                   45000000, "2026-09-01", "2027-06-30"))
+        c.execute("""INSERT INTO projets(nom, client, localisation, budget, debut, fin_prevue)
+                     VALUES (?, ?, ?, ?, ?, ?)""",
+                  ("Réhabilitation d'un bâtiment", "Entreprise BTP Cameroun", "Yaoundé - Mvan",
+                   18000000, "2026-08-15", "2027-02-28"))
+        c.execute("""INSERT INTO projets(nom, client, localisation, budget, debut, fin_prevue)
+                     VALUES (?, ?, ?, ?, ?, ?)""",
+                  ("Petit immeuble R+3", "SCI Les Bâtisseurs", "Bafoussam - Centre",
+                   82000000, "2026-10-01", "2027-12-15"))
+
+        ids = [row[0] for row in c.execute("SELECT id FROM projets ORDER BY id").fetchall()]
+        p1, p2, p3 = ids
+        c.executemany("""INSERT INTO taches(projet_id, lot, tache, responsable, debut, fin_prevue,
+                         avancement, statut, poids, cout_prevu, cout_reel)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", [
+            (p1, "Gros œuvre", "Fondations", "Jean Mvondo", "2026-09-01", "2026-10-15", 100, "Terminé", 2, 6500000, 6300000),
+            (p1, "Gros œuvre", "Élévation des murs", "Paul Tchoumi", "2026-10-16", "2026-12-15", 55, "En cours", 3, 12000000, 6800000),
+            (p1, "Gros œuvre", "Dalle du premier étage", "André Nguema", "2026-12-16", "2027-01-20", 10, "En cours", 2, 7500000, 900000),
+            (p1, "Second œuvre", "Électricité", "Marie Fotso", "2027-02-01", "2027-03-15", 0, "À faire", 1, 2200000, 0),
+            (p2, "Réhabilitation", "Dépose et nettoyage", "Samuel Etoa", "2026-08-15", "2026-09-10", 100, "Terminé", 1, 1800000, 1750000),
+            (p2, "Finition", "Peinture intérieure", "Marie Fotso", "2026-10-01", "2026-11-20", 50, "En cours", 2, 3200000, 1700000),
+            (p3, "Gros œuvre", "Implantation et terrassement", "David Kenfack", "2026-10-01", "2026-11-15", 15, "En cours", 2, 5000000, 950000),
+        ])
+        c.executemany("""INSERT INTO ouvriers(nom, metier, telephone, projet_id, heures)
+                         VALUES (?, ?, ?, ?, ?)""", [
+            ("Jean Mvondo", "Chef de chantier", "690 00 00 01", p1, 180),
+            ("Paul Tchoumi", "Maçon", "690 00 00 02", p1, 156),
+            ("André Nguema", "Ferrailleur", "690 00 00 03", p1, 124),
+            ("Marie Fotso", "Conductrice de travaux", "690 00 00 04", p2, 142),
+            ("Samuel Etoa", "Menuisier", "690 00 00 05", p2, 96),
+            ("David Kenfack", "Manœuvre", "690 00 00 06", p3, 72),
+        ])
+        c.executemany("""INSERT INTO materiaux(nom, unite, quantite_prevue, quantite_utilisee,
+                         prix_unitaire, projet_id) VALUES (?, ?, ?, ?, ?, ?)""", [
+            ("Ciment CPJ 35", "sacs", 500, 120, 5500, p1),
+            ("Fer à béton 12 mm", "barres", 250, 80, 4200, p1),
+            ("Sable", "m³", 40, 15, 18000, p1),
+            ("Ciment CPJ 35", "sacs", 200, 75, 5500, p2),
+            ("Parpaings 15", "unités", 5000, 900, 450, p3),
+        ])
+        c.executemany("""INSERT INTO depenses(date, categorie, description, montant, projet_id)
+                         VALUES (?, ?, ?, ?, ?)""", [
+            ("2026-10-02", "Matériaux", "Achat de ciment", 660000, p1),
+            ("2026-10-04", "Transport", "Transport de sable", 95000, p1),
+            ("2026-10-06", "Équipement", "Location de matériel", 180000, p1),
+            ("2026-10-03", "Matériaux", "Achat de peinture", 240000, p2),
+            ("2026-10-08", "Matériaux", "Achat de parpaings", 405000, p3),
+        ])
+
     c.commit()
     return c
 
