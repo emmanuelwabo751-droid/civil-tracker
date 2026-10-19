@@ -188,8 +188,49 @@ def seed_demo_data(conn):
                 ("2026-10-10", "Transport", "Transport gravier et sable", 420_000),
             ],
         },
+        {
+            "nom": "Construction d'une école R+2",
+            "client": "Association Éducation pour Tous", "localisation": "Bertoua - Mokolo",
+            "budget": 68_000_000, "debut": "2026-02-01", "fin": "2027-03-30",
+            "tasks": [
+                ("Préparation", "Installation et clôture du chantier", "Patrick Abanda", "2026-02-01", "2026-02-12", 100, "Terminé", 1, 1_200_000, 1_100_000),
+                ("Terrassement", "Décapage et nivellement du terrain", "Boris Meka", "2026-02-13", "2026-03-05", 100, "Terminé", 2, 2_800_000, 2_650_000),
+                ("Fondations", "Fouilles et béton de propreté", "Boris Meka", "2026-03-06", "2026-03-25", 90, "En cours", 3, 4_500_000, 3_900_000),
+                ("Fondations", "Ferraillage et coulage des semelles", "Cédric Nlom", "2026-03-26", "2026-04-25", 80, "En cours", 4, 8_500_000, 6_800_000),
+                ("Structure", "Poteaux et poutres du rez-de-chaussée", "Cédric Nlom", "2026-04-26", "2026-07-15", 75, "En cours", 4, 12_000_000, 8_000_000),
+                ("Maçonnerie", "Élévation des murs du rez-de-chaussée", "Nadine Etoa", "2026-07-16", "2026-09-15", 75, "En cours", 3, 6_500_000, 3_900_000),
+                ("Structure", "Coffrage et ferraillage de la dalle du 1er étage", "Cédric Nlom", "2026-09-16", "2026-11-15", 70, "En cours", 4, 9_000_000, 2_700_000),
+                ("Réseaux", "Pré-installation électrique et plomberie", "Nadine Etoa", "2026-11-16", "2027-01-15", 70, "En cours", 2, 3_500_000, 0),
+            ],
+            "workers": [
+                ("Patrick Abanda", "Chef de chantier", "690000401", 280),
+                ("Boris Meka", "Conducteur d'engins", "690000402", 240),
+                ("Cédric Nlom", "Coffreur-ferrailleur", "690000403", 300),
+                ("Nadine Etoa", "Maçonne", "690000404", 210),
+                ("Samuel Owona", "Électricien", "690000405", 90),
+                ("Aline Biloa", "Plombière", "690000406", 75),
+            ],
+            "materials": [
+                ("Ciment CPJ 42.5", "sac", 1500, 920, 5200),
+                ("Fer à béton 12 mm", "barre", 800, 510, 4500),
+                ("Sable", "m³", 180, 110, 18000),
+                ("Gravier", "m³", 130, 75, 25000),
+                ("Parpaings", "unité", 18000, 8200, 450),
+                ("Bois de coffrage", "pièce", 260, 150, 3000),
+                ("Gaines électriques", "rouleau", 45, 12, 18000),
+                ("Tuyaux PVC", "barre", 120, 30, 6500),
+            ],
+            "expenses": [
+                ("2026-02-05", "Équipement", "Location niveleuse et compacteur", 1_100_000),
+                ("2026-03-18", "Matériaux", "Achat ciment, sable et gravier", 2_850_000),
+                ("2026-04-12", "Main-d'œuvre", "Paiement équipe fondations", 1_250_000),
+                ("2026-06-08", "Matériaux", "Achat fers à béton", 2_300_000),
+                ("2026-08-22", "Transport", "Livraison parpaings et bois", 680_000),
+                ("2026-09-30", "Main-d'œuvre", "Paiement équipe maçonnerie", 1_450_000),
+                ("2026-10-12", "Équipement", "Location bétonnière et échafaudages", 520_000),
+            ],
+        },
     ]
-
     for demo in demos:
         found = conn.execute("SELECT id FROM projets WHERE nom = ?", (demo["nom"],)).fetchone()
         if found:
@@ -347,10 +388,10 @@ projects = load_table(conn, "projets")
 
 st.title("🏗️ CIVIL TRACKER")
 st.caption("Gestion, analyse et suivi des travaux, des équipes, des matériaux et du budget.")
-st.info("Les données de démonstration sont fictives. Elles sont stockées localement dans chantier.db.")
+st.info("4 projets de démonstration avec travaux, avancement, ouvriers, matériaux, dépenses et analyses. Les données sont fictives et stockées localement dans chantier.db.")
 
 menu = st.sidebar.radio("MENU PRINCIPAL", [
-    "Tableau de bord", "Projets", "Travaux / Avancement",
+    "Vue globale des projets", "Tableau de bord", "Projets", "Travaux / Avancement",
     "Ouvriers", "Matériaux", "Dépenses", "Analyse", "Données / Export"
 ])
 
@@ -373,7 +414,74 @@ def select_project(key):
     )
 
 
-if menu == "Tableau de bord":
+if menu == "Vue globale des projets":
+    st.header("Vue globale — portefeuille des 4 projets")
+    st.caption("Comparez l'avancement, les budgets, les dépenses, les travaux et les matériaux des chantiers.")
+    if projects.empty:
+        st.warning("Aucun projet enregistré.")
+    else:
+        rows = []
+        for _, project in projects.iterrows():
+            pid_global = int(project["id"])
+            tdf = load_table(conn, "taches", pid_global)
+            edf = load_table(conn, "depenses", pid_global)
+            wdf = load_table(conn, "ouvriers", pid_global)
+            mdf = load_table(conn, "materiaux", pid_global)
+            weight_total = tdf["poids"].sum() if not tdf.empty else 0
+            progress_global = ((tdf["avancement"] * tdf["poids"]).sum() / weight_total) if weight_total else 0
+            budget_global = float(project["budget"] or 0)
+            spent_global = float(edf["montant"].sum()) if not edf.empty else 0
+            rows.append({
+                "Chantier": project["nom"], "Localisation": project["localisation"],
+                "Avancement (%)": round(progress_global, 1), "Budget (FCFA)": budget_global,
+                "Dépenses (FCFA)": spent_global, "Solde budget (FCFA)": budget_global - spent_global,
+                "Nombre de tâches": len(tdf), "Tâches ≥ 70 %": int((tdf["avancement"] >= 70).sum()) if not tdf.empty else 0,
+                "Ouvriers": len(wdf), "Matériaux suivis": len(mdf),
+            })
+        overview = pd.DataFrame(rows)
+        total_budget = overview["Budget (FCFA)"].sum()
+        total_spent = overview["Dépenses (FCFA)"].sum()
+        weighted_progress = (overview["Avancement (%)"] * overview["Budget (FCFA)"]).sum() / total_budget if total_budget else 0
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Projets", len(overview))
+        m2.metric("Avancement global pondéré", f"{weighted_progress:.1f}%")
+        m3.metric("Budget cumulé", money(total_budget))
+        m4.metric("Dépenses cumulées", money(total_spent))
+        st.dataframe(overview, use_container_width=True, hide_index=True)
+        st.plotly_chart(px.bar(overview, x="Chantier", y="Avancement (%)", color="Chantier", title="Avancement comparé des 4 chantiers"), use_container_width=True)
+        st.plotly_chart(px.bar(overview, x="Chantier", y=["Budget (FCFA)", "Dépenses (FCFA)"], barmode="group", title="Budget prévu et dépenses enregistrées par chantier"), use_container_width=True)
+        st.subheader("Détail par chantier")
+        for _, project in projects.iterrows():
+            pid_global = int(project["id"])
+            with st.expander(f"🏗️ {project['nom']} — {project['localisation']}"):
+                st.write(f"**Client :** {project['client']}  ·  **Budget :** {money(project['budget'])}  ·  **Période :** {project['debut']} au {project['fin_prevue']}")
+                tdf = load_table(conn, "taches", pid_global)
+                mdf = load_table(conn, "materiaux", pid_global)
+                edf = load_table(conn, "depenses", pid_global)
+                tab1, tab2, tab3 = st.tabs(["Travaux et avancement", "Matériaux utilisés", "Dépenses et analyse"])
+                with tab1:
+                    if not tdf.empty:
+                        st.dataframe(tdf[["lot", "tache", "responsable", "avancement", "statut", "debut", "fin_prevue", "cout_prevu", "cout_reel"]], use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Aucune tâche enregistrée.")
+                with tab2:
+                    if not mdf.empty:
+                        mdf["Quantité restante"] = mdf["quantite_prevue"] - mdf["quantite_utilisee"]
+                        mdf["Valeur utilisée (FCFA)"] = mdf["quantite_utilisee"] * mdf["prix_unitaire"]
+                        st.dataframe(mdf[["nom", "unite", "quantite_prevue", "quantite_utilisee", "Quantité restante", "prix_unitaire", "Valeur utilisée (FCFA)"]], use_container_width=True, hide_index=True)
+                        st.metric("Valeur des matériaux consommés", money(mdf["Valeur utilisée (FCFA)"].sum()))
+                    else:
+                        st.info("Aucun matériau enregistré.")
+                with tab3:
+                    if not edf.empty:
+                        st.dataframe(edf, use_container_width=True, hide_index=True)
+                        st.metric("Total des dépenses", money(edf["montant"].sum()))
+                        by_category = edf.groupby("categorie", as_index=False)["montant"].sum()
+                        st.plotly_chart(px.pie(by_category, names="categorie", values="montant", title="Répartition des dépenses"), use_container_width=True)
+                    else:
+                        st.info("Aucune dépense enregistrée.")
+
+elif menu == "Tableau de bord":
     if projects.empty:
         st.warning("Créez d'abord un projet.")
     else:
